@@ -1,40 +1,165 @@
 {% extends "layout.njk" %}
+{% set active_page = 'contest' %}
 {% block content %}
-  <h2 class="ui header">{{ problem.id }} — {{ problem.title }}</h2>
-  <div class="ui segment">
-    <pre style="white-space:pre-wrap;">{{ problem.statement }}</pre>
+  <div class="ui grid">
+    <div class="twelve wide column">
+      <h2 class="ui header">
+        <i class="code icon"></i>
+        <div class="content">
+          {{ problem.id }} — {{ problem.title }}
+          <div class="sub header">
+            <i class="clock icon"></i> {{ problem.timelimit_ms }}ms
+            <i class="microchip icon"></i> {{ problem.memlimit_kb }}KB
+            <i class="star icon"></i> {{ problem.score }} points
+          </div>
+        </div>
+      </h2>
+      
+      <div class="ui segment">
+        <h4 class="ui header">Problem Statement</h4>
+        <div class="problem-statement">{{ problem.statement }}</div>
+      </div>
+    </div>
+    
+    <div class="four wide column">
+      {% if contest %}
+        <div class="ui segment">
+          <h4 class="ui header">
+            <i class="upload icon"></i>
+            Submit Solution
+          </h4>
+          
+          <form class="ui form" method="post" action="/contest/{{ contest.id }}/problem/{{ problem.id }}/submit" id="submitForm">
+            <div class="field">
+              <label>Programming Language</label>
+              <select name="language" class="ui dropdown" required>
+                <option value="">Select Language</option>
+                <option value="cpp">C++ (g++ -std=c++26)</option>
+                <option value="python">Python 3</option>
+                <option value="node">Node.js</option>
+              </select>
+            </div>
+            
+            <div class="field">
+              <label>Source Code</label>
+              <textarea name="source" rows="12" placeholder="Paste your code here..." required></textarea>
+              <div class="ui pointing below label">
+                Max {{ 50000 }} characters
+              </div>
+            </div>
+            
+            <button class="ui primary fluid button" type="submit">
+              <i class="paper plane icon"></i>
+              Submit Solution
+            </button>
+          </form>
+        </div>
+      {% endif %}
+    </div>
   </div>
 
   {% if contest %}
-    <h3 class="ui header">Submit</h3>
-    <form class="ui form" method="post" action="/contest/{{ contest.id }}/problem/{{ problem.id }}/submit">
-      <div class="field">
-        <label>Language</label>
-        <select name="language" class="ui dropdown">
-          <!--<option value="node">Node.js</option>-->
-          <option value="cpp">C++</option>
-          <option value="python">Python 3</option>
-        </select>
-      </div>
-      <div class="field"><label>Source</label><textarea name="source" rows="16"></textarea></div>
-      <button class="ui primary button">Submit</button>
-    </form>
-
-    <h4 class="ui header">Your recent submissions for this problem</h4>
-    <table class="ui celled table">
-      <thead><tr><th>ID</th><th>Status</th><th>Score</th><th>Time</th></tr></thead>
-      <tbody>
-        {% for s in submissions %}
-          <tr>
-            <td><a href="/submission/{{ s.id }}">{{ s.id }}</a></td>
-            <td>{{ s.status }} {% if s.compile_error %}(CE){% endif %}</td>
-            <td>{{ s.score }}</td>
-            <td>{{ s.created_ts | fmtDate }}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="4">No submissions</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="ui segment">
+      <h4 class="ui header">
+        <i class="history icon"></i>
+        Your Submissions
+        <div class="sub header">Recent submissions for this problem</div>
+      </h4>
+      
+      {% if submissions and submissions.length %}
+        <table class="ui celled striped table">
+          <thead>
+            <tr>
+              <th width="80px">ID</th>
+              <th width="100px">Status</th>
+              <th width="80px">Score</th>
+              <th width="120px">Runtime</th>
+              <th>Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in submissions %}
+              <tr>
+                <td>
+                  <a href="/submission/{{ s.id }}" class="ui mini label">
+                    #{{ s.id }}
+                  </a>
+                </td>
+                <td>
+                  <span class="status-{{ s.status }}">
+                    {% if s.compile_error %}
+                      <i class="times circle icon"></i> CE
+                    {% else %}
+                      {% if s.status == 'AC' %}
+                        <i class="check circle icon"></i>
+                      {% elif s.status == 'judging' %}
+                        <i class="spinner loading icon"></i>
+                      {% else %}
+                        <i class="times circle icon"></i>
+                      {% endif %}
+                      {{ s.status }}
+                    {% endif %}
+                  </span>
+                </td>
+                <td>
+                  {% if s.score > 0 %}
+                    <span class="ui green mini label">{{ s.score }}</span>
+                  {% else %}
+                    <span class="ui grey mini label">{{ s.score }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if s.runtime_ms %}
+                    {{ s.runtime_ms }}ms
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>
+                  <span title="{{ s.created_ts | fmtDate }}">
+                    {{ s.created_ts | fmtDate }}
+                  </span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="ui placeholder segment">
+          <div class="ui icon header">
+            <i class="code icon"></i>
+            No submissions yet
+          </div>
+          <div class="inline">
+            <div class="ui primary button" onclick="$('#submitForm textarea').focus()">
+              Submit Your First Solution
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
   {% endif %}
+
+  <script>
+    // Character counter for source code
+    $('textarea[name="source"]').on('input', function() {
+      const length = $(this).val().length;
+      const maxLength = 50000;
+      const label = $(this).siblings('.ui.label');
+      
+      if (length > maxLength * 0.9) {
+        label.addClass('orange');
+      } else {
+        label.removeClass('orange');
+      }
+      
+      if (length > maxLength) {
+        label.addClass('red').removeClass('orange');
+      } else {
+        label.removeClass('red');
+      }
+      
+      label.text(`${length} / ${maxLength} characters`);
+    });
+  </script>
 {% endblock %}

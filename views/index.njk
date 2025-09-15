@@ -1,36 +1,169 @@
 {% extends "layout.njk" %}
+{% set active_page = 'home' %}
 {% block content %}
-  <h2 class="ui header">Contests</h2>
-  <div class="ui relaxed divided list">
-    {% if contests and contests.length %}
-      {% for c in contests %}
-        <div class="item">
-          <i class="large calendar outline middle aligned icon"></i>
-          <div class="content">
-            <a class="header" href="/contests/{{ c.id }}">{{ c.title }}</a>
-            <div class="description">
-              {{ c.start_ts | fmtDate }} → {{ c.end_ts | fmtDate }}
-            </div>
-          </div>
+  <div class="ui stackable two column grid">
+    <div class="column">
+      <h2 class="ui header">
+        <i class="trophy icon"></i>
+        <div class="content">
+          Contests
+          <div class="sub header">Competitive programming contests</div>
         </div>
-      {% endfor %}
-    {% else %}
-      <div>No contests yet</div>
-    {% endif %}
+      </h2>
+      
+      {% if contests and contests.length %}
+        <div class="ui relaxed divided list">
+          {% for c in contests %}
+            {% set now = Date.now() %}
+            {% set status = 'upcoming' if c.start_ts > now else ('running' if c.end_ts > now else 'ended') %}
+            
+            <div class="item contest-{{ status }}">
+              <i class="large calendar {{ 'check' if status == 'ended' else ('play' if status == 'running' else 'clock outline') }} middle aligned icon"></i>
+              <div class="content">
+                <a class="header" href="/contests/{{ c.id }}">{{ c.title }}</a>
+                <div class="description">
+                  <div>
+                    <i class="clock icon"></i>
+                    <strong>Start:</strong> {{ c.start_ts | fmtDate }} <br>
+                    <i class="flag checkered icon"></i>
+                    <strong>End:</strong> {{ c.end_ts | fmtDate }}
+                  </div>
+                  <div style="margin-top: 5px;">
+                    {% if status == 'upcoming' %}
+                      <span class="ui yellow mini label">
+                        <i class="clock icon"></i> Upcoming
+                      </span>
+                    {% elif status == 'running' %}
+                      <span class="ui green mini label">
+                        <i class="play icon"></i> Live Now
+                      </span>
+                    {% else %}
+                      <span class="ui grey mini label">
+                        <i class="check icon"></i> Finished
+                      </span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="ui placeholder segment">
+          <div class="ui icon header">
+            <i class="calendar outline icon"></i>
+            No contests available
+          </div>
+          <p>Check back later for upcoming contests!</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="column">
+      <h2 class="ui header">
+        <i class="code icon"></i>
+        <div class="content">
+          Practice Problems
+          <div class="sub header">Solve problems to improve your skills</div>
+        </div>
+      </h2>
+      
+      {% if problems and problems.length %}
+        <div class="ui stackable cards">
+          {% for p in problems %}
+            <div class="card">
+              <div class="content">
+                <div class="header">
+                  <a href="/problem/{{ p.id }}">{{ p.id }}</a>
+                </div>
+                <div class="meta">{{ p.title }}</div>
+                <div class="description" style="margin-top: 10px;">
+                  <div class="ui mini labels">
+                    <span class="ui blue mini label">
+                      <i class="code icon"></i> Problem
+                    </span>
+                    {% if user and user.role == 'admin' %}
+                      <span class="ui grey mini label">
+                        <i class="eye icon"></i> Admin Only
+                      </span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              {% if user and user.role == 'admin' %}
+                <div class="extra content">
+                  <div class="ui two buttons">
+                    <div class="ui basic blue button" onclick="location.href='/problem/{{ p.id }}'">
+                      <i class="eye icon"></i> View
+                    </div>
+                    <div class="ui basic green button" onclick="location.href='/admin/problems/{{ p.id }}'">
+                      <i class="edit icon"></i> Edit
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="ui placeholder segment">
+          <div class="ui icon header">
+            <i class="code icon"></i>
+            No problems available
+          </div>
+          {% if user and user.role == 'admin' %}
+            <div class="inline">
+              <div class="ui primary button" onclick="location.href='/admin/problems/create'">
+                <i class="plus icon"></i> Create First Problem
+              </div>
+            </div>
+          {% else %}
+            <p>Problems will be available soon!</p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
   </div>
 
-  <h2 class="ui header">Global problemset</h2>
-  <div class="ui cards">
-    {% if problems and problems.length %}
-      {% for p in problems %}
-        <div class="card">
-          <div class="content">
-            <div class="header"><a href="/problem/{{ p.id }}">{{ p.id }} - {{ p.title }}</a></div>
+  <!-- Quick Stats for Admins -->
+  {% if user and user.role == 'admin' %}
+    <div class="ui segment" style="margin-top: 30px;">
+      <h4 class="ui header">
+        <i class="chart bar icon"></i>
+        Admin Quick Stats
+      </h4>
+      <div class="ui three statistics">
+        <div class="statistic">
+          <div class="value">{{ contests.length if contests else 0 }}</div>
+          <div class="label">Contests</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ problems.length if problems else 0 }}</div>
+          <div class="label">Problems</div>
+        </div>
+        <div class="statistic">
+          <div class="value">
+            <i class="cog icon"></i>
+          </div>
+          <div class="label">
+            <a href="/admin/problems">Admin Panel</a>
           </div>
         </div>
-      {% endfor %}
-    {% else %}
-      <div>No problems</div>
-    {% endif %}
-  </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Getting Started for New Users -->
+  {% if not user %}
+    <div class="ui info message" style="margin-top: 30px;">
+      <i class="info circle icon"></i>
+      <div class="content">
+        <div class="header">Welcome to Local Online Judge!</div>
+        <p>
+          This platform hosts competitive programming contests and practice problems. 
+          <a href="/register">Create an account</a> to participate in contests and submit solutions.
+        </p>
+      </div>
+    </div>
+  {% endif %}
 {% endblock %}

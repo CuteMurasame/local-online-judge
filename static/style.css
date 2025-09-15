@@ -1,3 +1,106 @@
-body { font-family: 'Segoe UI', Roboto, Arial, sans-serif; background: #f7f7f7; }
-.ui.container { background: white; padding: 18px; border-radius: 6px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
-pre { white-space: pre-wrap; word-break: break-word; }
+body { 
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif; 
+  background: #f7f7f7; 
+  line-height: 1.6;
+}
+
+.ui.container { 
+  background: white; 
+  padding: 24px; 
+  border-radius: 8px; 
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1); 
+  margin-bottom: 20px;
+}
+
+pre { 
+  white-space: pre-wrap; 
+  word-break: break-word; 
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 4px solid #007bff;
+}
+
+/* Status indicators */
+.status-AC { color: #28a745; font-weight: bold; }
+.status-WA { color: #dc3545; font-weight: bold; }
+.status-TLE { color: #fd7e14; font-weight: bold; }
+.status-RE { color: #6f42c1; font-weight: bold; }
+.status-CE { color: #6c757d; font-weight: bold; }
+.status-judging { color: #17a2b8; font-weight: bold; }
+
+/* Form improvements */
+.ui.form textarea {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Loading states */
+.ui.button.loading {
+  pointer-events: none;
+}
+
+/* Enhanced cards */
+.ui.cards > .card {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+}
+
+.ui.cards > .card:hover {
+  box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+  transform: translateY(-2px);
+}
+
+/* Contest status indicators */
+.contest-upcoming { 
+  border-left: 4px solid #ffc107; 
+  background: #fff9c4;
+}
+.contest-running { 
+  border-left: 4px solid #28a745; 
+  background: #d4edda;
+}
+.contest-ended { 
+  border-left: 4px solid #6c757d; 
+  background: #f8f9fa;
+}
+
+/* Problem difficulty indicators */
+.difficulty-easy { color: #28a745; }
+.difficulty-medium { color: #ffc107; }
+.difficulty-hard { color: #dc3545; }
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .ui.container {
+    padding: 16px;
+    margin: 10px;
+  }
+  
+  .ui.form textarea {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* Admin panel styling */
+.admin-section {
+  background: #e9ecef;
+  border-radius: 6px;
+  padding: 20px;
+  margin: 15px 0;
+}
+
+/* Security warnings */
+.security-warning {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 15px;
+  margin: 15px 0;
+}
+
+.security-warning strong {
+  color: #491217;
+}

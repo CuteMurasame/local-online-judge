@@ -1,34 +1,200 @@
 {% extends "layout.njk" %}
 {% block content %}
-  <h2 class="ui header">Submission #{{ sub.id }} — Problem {{ sub.problem_id }}</h2>
-  <div class="ui segment">
-    <p><strong>User:</strong> {{ sub.username }}</p>
-    <p><strong>Language:</strong> {{ sub.language }} <strong>Status:</strong> {{ sub.status }} {% if sub.compile_error %}<span style="color:red">(CE)</span>{% endif %}</p>
-    <p><strong>Score:</strong> {{ sub.score }}</p>
-    <p><strong>Submitted:</strong> {{ sub.created_ts | fmtDate }}</p>
+  <div class="ui stackable grid">
+    <div class="ten wide column">
+      <h2 class="ui header">
+        <i class="file code icon"></i>
+        <div class="content">
+          Submission #{{ sub.id }}
+          <div class="sub header">Problem {{ sub.problem_id }} by {{ sub.username }}</div>
+        </div>
+      </h2>
+      
+      <div class="ui segment">
+        <div class="ui relaxed horizontal list">
+          <div class="item">
+            <i class="user icon"></i>
+            <div class="content">
+              <div class="header">{{ sub.username }}</div>
+              <div class="description">Submitter</div>
+            </div>
+          </div>
+          <div class="item">
+            <i class="code icon"></i>
+            <div class="content">
+              <div class="header">{{ sub.language }}</div>
+              <div class="description">Language</div>
+            </div>
+          </div>
+          <div class="item">
+            <i class="clock icon"></i>
+            <div class="content">
+              <div class="header">{{ sub.created_ts | fmtDate }}</div>
+              <div class="description">Submitted</div>
+            </div>
+          </div>
+          {% if sub.runtime_ms %}
+          <div class="item">
+            <i class="tachometer alternate icon"></i>
+            <div class="content">
+              <div class="header">{{ sub.runtime_ms }}ms</div>
+              <div class="description">Runtime</div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    
+    <div class="six wide column">
+      <div class="ui segment">
+        <h4 class="ui header">
+          <i class="chart line icon"></i>
+          Verdict & Score
+        </h4>
+        
+        <div class="ui statistics">
+          <div class="statistic">
+            <div class="value status-{{ sub.status }}">
+              {% if sub.compile_error %}
+                <i class="times circle icon"></i> CE
+              {% else %}
+                {% if sub.status == 'AC' %}
+                  <i class="check circle icon"></i>
+                {% elif sub.status == 'judging' %}
+                  <i class="spinner loading icon"></i>
+                {% else %}
+                  <i class="times circle icon"></i>
+                {% endif %}
+                {{ sub.status }}
+              {% endif %}
+            </div>
+            <div class="label">Status</div>
+          </div>
+          <div class="statistic">
+            <div class="value {{ 'green' if sub.score > 0 else 'grey' }}">
+              {{ sub.score }}
+            </div>
+            <div class="label">Score</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  {% if sub.compile_error %}
-    <h3 class="ui header">Compile output</h3>
-    <pre>{{ sub.compile_output }}</pre>
+  {% if sub.compile_error and sub.compile_output %}
+    <div class="ui red segment">
+      <h4 class="ui header">
+        <i class="exclamation triangle icon"></i>
+        Compilation Error
+      </h4>
+      <pre class="compile-output">{{ sub.compile_output }}</pre>
+    </div>
   {% endif %}
 
   {% if results %}
-    <h3 class="ui header">Per-test results</h3>
-    <table class="ui celled table">
-      <thead><tr><th>#</th><th>Verdict</th><th>Time (ms)</th><th>Stderr (trim)</th></tr></thead>
-      <tbody>
-        {% for r in results %}
+    <div class="ui segment">
+      <h4 class="ui header">
+        <i class="list icon"></i>
+        Test Case Results
+        <div class="sub header">Detailed results for each test case</div>
+      </h4>
+      
+      <table class="ui celled striped table">
+        <thead>
           <tr>
-            <td>{{ r.index }}</td>
-            <td>{{ r.verdict }}</td>
-            <td>{{ r.runtime_ms }}</td>
-            <td><pre>{{ r.stderr | truncate(300, true) }}</pre></td>
+            <th width="60px">Test</th>
+            <th width="100px">Verdict</th>
+            <th width="100px">Runtime</th>
+            <th>Error Details</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for r in results %}
+            <tr class="{{ 'positive' if r.verdict == 'AC' else ('negative' if r.verdict in ['WA', 'RE', 'TLE'] else '') }}">
+              <td>
+                <div class="ui circular label">{{ r.index }}</div>
+              </td>
+              <td>
+                <span class="status-{{ r.verdict }}">
+                  {% if r.verdict == 'AC' %}
+                    <i class="check icon"></i> AC
+                  {% elif r.verdict == 'WA' %}
+                    <i class="times icon"></i> WA
+                  {% elif r.verdict == 'TLE' %}
+                    <i class="clock icon"></i> TLE
+                  {% elif r.verdict == 'RE' %}
+                    <i class="exclamation icon"></i> RE
+                  {% else %}
+                    <i class="question icon"></i> {{ r.verdict }}
+                  {% endif %}
+                </span>
+              </td>
+              <td>
+                {% if r.runtime_ms %}
+                  {{ r.runtime_ms }}ms
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if r.stderr and r.stderr.trim() %}
+                  <div class="ui accordion">
+                    <div class="title">
+                      <i class="dropdown icon"></i>
+                      View error details
+                    </div>
+                    <div class="content">
+                      <pre style="max-height: 200px; overflow-y: auto;">{{ r.stderr | truncate(1000, true) }}</pre>
+                    </div>
+                  </div>
+                {% else %}
+                  <em class="text-muted">No errors</em>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      
+      <!-- Summary -->
+      {% set passed = results | selectattr("verdict", "equalto", "AC") | list | length %}
+      {% set total = results | length %}
+      <div class="ui {{ 'green' if passed == total else 'orange' }} message">
+        <div class="header">
+          Test Summary: {{ passed }}/{{ total }} passed
+        </div>
+        {% if passed == total %}
+          <p><i class="check icon"></i> All test cases passed successfully!</p>
+        {% else %}
+          <p><i class="info icon"></i> {{ total - passed }} test case(s) failed. Review the error details above.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% elif sub.status == 'judging' %}
+    <div class="ui segment">
+      <div class="ui active centered inline loader"></div>
+      <p style="text-align: center; margin-top: 20px;">
+        <strong>Judging in progress...</strong><br>
+        This page will automatically refresh when judging is complete.
+      </p>
+    </div>
   {% else %}
-    <div class="ui message">No per-test results available.</div>
+    <div class="ui info message">
+      <div class="header">No detailed results available</div>
+      <p>Test case results are not available for this submission.</p>
+    </div>
   {% endif %}
+
+  <script>
+    // Initialize accordions
+    $('.ui.accordion').accordion();
+    
+    // Auto-refresh if still judging
+    {% if sub.status == 'judging' %}
+      setTimeout(function() {
+        window.location.reload();
+      }, 3000);
+    {% endif %}
+  </script>
 {% endblock %}
