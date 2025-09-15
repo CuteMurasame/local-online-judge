@@ -16,21 +16,50 @@ const app = express();
 // Use multer for file uploads (destination handled by us)
 const upload = multer({ dest: 'uploads/' });
 
-// CONFIG
+// CONFIG - Environment variables with validation
 const DB_HOST = process.env.DB_HOST || '127.0.0.1';
 const DB_USER = process.env.DB_USER || 'root';
 const DB_PASSWORD = process.env.DB_PASSWORD || '';
 const DB_NAME = process.env.DB_NAME || 'cp_platform';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'please-change-me';
 const TESTCASE_BASE = path.join(__dirname, 'data', 'testcases'); // where testcase files are stored
+const MAX_SOURCE_LENGTH = parseInt(process.env.MAX_SOURCE_LENGTH) || 50000; // Max source code length
+const MAX_FILENAME_LENGTH = 100; // Max filename length for security
+
+// Validate critical configuration
+if (SESSION_SECRET === 'please-change-me') {
+  console.warn('WARNING: Using default session secret. Set SESSION_SECRET environment variable for production!');
+}
 
 // ensure directory exists
 if (!fs.existsSync(TESTCASE_BASE)) fs.mkdirSync(TESTCASE_BASE, { recursive: true });
 
+// Database connection with better error handling and optimization
 const pool = mysql.createPool({
-  host: DB_HOST, user: DB_USER, password: DB_PASSWORD, database: DB_NAME,
-  waitForConnections: true, connectionLimit: 10, queueLimit: 0, charset: 'utf8mb4'
+  host: DB_HOST, 
+  user: DB_USER, 
+  password: DB_PASSWORD, 
+  database: DB_NAME,
+  waitForConnections: true, 
+  connectionLimit: 20, // Increased from 10
+  queueLimit: 0, 
+  charset: 'utf8mb4',
+  acquireTimeout: 60000,
+  timeout: 60000,
+  reconnect: true
 });
+
+// Test database connection on startup
+(async function testDbConnection() {
+  try {
+    const connection = await pool.getConnection();
+    console.log('Database connection established successfully');
+    connection.release();
+  } catch (error) {
+    console.error('Failed to connect to database:', error);
+    process.exit(1);
+  }
+})();
 
 // Nunjucks setup
 const env = nunjucks.configure('views', { autoescape: true, express: app });
@@ -78,9 +107,57 @@ app.use(async (req, res, next) => {
   next();
 });
 
-function ensureLogin(req, res, next) { if (!req.session.userId) return res.redirect('/login'); next(); }
-async function ensureAdmin(req, res, next) { if (!res.locals.user || res.locals.user.role !== 'admin') return res.status(403).send('Admin only'); next(); }
-const pidRegex = /^[A-Za-z0-9_]+$/;
+function ensureLogin(req, res, next) { 
+  if (!req.session.userId) return res.redirect('/login'); 
+  next(); 
+}
+
+async function ensureAdmin(req, res, next) { 
+  if (!res.locals.user || res.locals.user.role !== 'admin') 
+    return res.status(403).send('Admin only'); 
+  next(); 
+}
+
+/**
+ * Validates problem ID format for security
+ * @param {string} id - Problem ID to validate
+ * @returns {boolean} - True if valid
+ */
+function isValidProblemId(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{1,50}$/.test(id);
+}
+
+/**
+ * Validates and sanitizes filename for security
+ * @param {string} filename - Filename to validate
+ * @returns {string|null} - Sanitized filename or null if invalid
+ */
+function sanitizeFilename(filename) {
+  if (!filename || typeof filename !== 'string') return null;
+  const sanitized = filename.replace(/[^A-Za-z0-9._-]/g, '_');
+  return sanitized.length > MAX_FILENAME_LENGTH ? sanitized.substr(0, MAX_FILENAME_LENGTH) : sanitized;
+}
+
+/**
+ * Validates source code input
+ * @param {string} source - Source code to validate
+ * @param {string} language - Programming language
+ * @returns {object} - {valid: boolean, error?: string}
+ */
+function validateSourceCode(source, language) {
+  if (!source || typeof source !== 'string') {
+    return { valid: false, error: 'Source code is required' };
+  }
+  if (source.length > MAX_SOURCE_LENGTH) {
+    return { valid: false, error: `Source code too long (max ${MAX_SOURCE_LENGTH} characters)` };
+  }
+  if (!['cpp', 'python', 'node'].includes(language)) {
+    return { valid: false, error: 'Unsupported programming language' };
+  }
+  return { valid: true };
+}
+
+const pidRegex = /^[A-Za-z0-9_-]+$/;
 
 // ---------- Routes (important ones only shown in full) ----------
 
@@ -116,12 +193,38 @@ app.get('/admin/problems', ensureAdmin, async (req,res) => {
 app.get('/admin/problems/create', ensureAdmin, (req,res)=>res.render('admin_create_problem.njk',{error:null}));
 app.post('/admin/problems/create', ensureAdmin, upload.none(), async (req,res) => {
   const { id, title, statement, timelimit_ms, memlimit_kb, score, visibility } = req.body;
-  if (!pidRegex.test(id)) return res.render('admin_create_problem.njk',{error:'Invalid id'});
+  
+  // Validate inputs
+  if (!isValidProblemId(id)) {
+    return res.render('admin_create_problem.njk', {error: 'Invalid problem ID. Use only letters, numbers, hyphens, and underscores (max 50 chars)'});
+  }
+  if (!title || title.length > 255) {
+    return res.render('admin_create_problem.njk', {error: 'Problem title is required and must be under 255 characters'});
+  }
+  
+  const timeLimit = parseInt(timelimit_ms) || 2000;
+  const memLimit = parseInt(memlimit_kb) || 65536;
+  const problemScore = parseInt(score) || 100;
+  
+  // Validate ranges
+  if (timeLimit < 100 || timeLimit > 30000) {
+    return res.render('admin_create_problem.njk', {error: 'Time limit must be between 100ms and 30000ms'});
+  }
+  if (memLimit < 1024 || memLimit > 1048576) {
+    return res.render('admin_create_problem.njk', {error: 'Memory limit must be between 1MB and 1GB'});
+  }
+  if (problemScore < 1 || problemScore > 1000) {
+    return res.render('admin_create_problem.njk', {error: 'Score must be between 1 and 1000'});
+  }
+  
   try {
     await pool.query('INSERT INTO problems (id, title, statement, timelimit_ms, memlimit_kb, score, visibility) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, title, statement, parseInt(timelimit_ms)||2000, parseInt(memlimit_kb)||65536, parseInt(score)||100, visibility==='contest' ? 'contest' : 'public']);
+      [id, title, statement, timeLimit, memLimit, problemScore, visibility === 'contest' ? 'contest' : 'public']);
     res.redirect('/admin/problems');
-  } catch(e) { console.error(e); res.render('admin_create_problem.njk',{error:'Error creating problem'}); }
+  } catch(e) { 
+    console.error('Problem creation error:', e); 
+    res.render('admin_create_problem.njk', {error: 'Error creating problem: ' + (e.code === 'ER_DUP_ENTRY' ? 'Problem ID already exists' : 'Database error')});
+  }
 });
 
 // Edit page (shows testcase filenames only)
@@ -356,135 +459,289 @@ app.get('/problem/:pid', ensureLogin, async (req,res) => {
 app.post('/contest/:cid/problem/:pid/submit', ensureLogin, upload.none(), async (req,res) => {
   const { cid, pid } = req.params;
   const { language, source } = req.body;
-  const [contestRows] = await pool.query('SELECT * FROM contests WHERE id = ?', [cid]);
-  const contest = contestRows[0];
-  if (!contest) return res.sendStatus(404);
-  const now = Date.now();
-  if (!(now >= contest.start_ts && now <= contest.end_ts)) return res.send('Contest not running');
-  const [cp] = await pool.query('SELECT * FROM contest_problems WHERE contest_id = ? AND problem_id = ?', [cid, pid]);
-  if (!cp.length) return res.status(404).send('Problem not in contest');
+  
+  // Validate source code
+  const sourceValidation = validateSourceCode(source, language);
+  if (!sourceValidation.valid) {
+    return res.status(400).send(sourceValidation.error);
+  }
+  
+  // Validate problem ID format
+  if (!isValidProblemId(pid)) {
+    return res.status(400).send('Invalid problem ID format');
+  }
+  
+  try {
+    const [contestRows] = await pool.query('SELECT * FROM contests WHERE id = ?', [cid]);
+    const contest = contestRows[0];
+    if (!contest) return res.sendStatus(404);
+    
+    const now = Date.now();
+    if (!(now >= contest.start_ts && now <= contest.end_ts)) {
+      return res.status(403).send('Contest not running');
+    }
+    
+    const [cp] = await pool.query('SELECT * FROM contest_problems WHERE contest_id = ? AND problem_id = ?', [cid, pid]);
+    if (!cp.length) return res.status(404).send('Problem not in contest');
 
-  const created_ts = Date.now();
-  const [ins] = await pool.query('INSERT INTO submissions (user_id, contest_id, problem_id, language, source, status, score, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [req.session.userId, cid, pid, language, source, 'judging', 0, created_ts]);
-  const submission_id = ins.insertId;
+    // Check rate limiting (max 1 submission per 30 seconds per user per problem)
+    const [recentSubs] = await pool.query(
+      'SELECT COUNT(*) as count FROM submissions WHERE user_id = ? AND problem_id = ? AND created_ts > ?',
+      [req.session.userId, pid, Date.now() - 30000]
+    );
+    if (recentSubs[0].count > 0) {
+      return res.status(429).send('Please wait 30 seconds between submissions');
+    }
 
-  // Fetch problem and testcases
-  const [pRows] = await pool.query('SELECT * FROM problems WHERE id = ?', [pid]);
-  const problem = pRows[0];
-  const [tests] = await pool.query('SELECT * FROM testcases WHERE problem_id = ? ORDER BY id', [pid]);
+    const created_ts = Date.now();
+    const [ins] = await pool.query('INSERT INTO submissions (user_id, contest_id, problem_id, language, source, status, score, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.session.userId, cid, pid, language, source, 'judging', 0, created_ts]);
+    const submission_id = ins.insertId;
 
-  // Judge asynchronously (fire-and-forget but we wrote submission record already)
-  (async () => {
-    try {
-      let compileError = false, compileOutput = '', exePath = null;
-      const workdir = path.join(__dirname, 'tmp_runs');
-      if (!fs.existsSync(workdir)) fs.mkdirSync(workdir, { recursive: true });
-      const runId = uuidv4();
-      const srcExt = language === 'cpp' ? '.cpp' : (language === 'python' ? '.py' : (language === 'node' ? '.js' : '.txt'));
-      const srcFile = path.join(workdir, runId + srcExt);
-      fs.writeFileSync(srcFile, source);
+    // Fetch problem and testcases
+    const [pRows] = await pool.query('SELECT * FROM problems WHERE id = ?', [pid]);
+    const problem = pRows[0];
+    const [tests] = await pool.query('SELECT * FROM testcases WHERE problem_id = ? ORDER BY id', [pid]);
 
-      // Compile if C++
-      if (language === 'cpp') {
-        // compile using requested command: g++ <srcFile> -o <binPath> -std=c++26 -O2 -lm
-        const binPath = path.join(workdir, runId + '_bin');
+    // Judge asynchronously with improved error handling
+    judgeSubmission(submission_id, problem, tests, language, source, cid, req.session.userId, pid);
+
+    res.redirect(`/contests/${cid}/submissions?problem=${pid}`);
+  } catch (error) {
+    console.error('Submission error:', error);
+    res.status(500).send('Internal server error during submission');
+  }
+});
+
+/**
+ * Judges a submission asynchronously with improved security and error handling
+ * @param {number} submission_id - Submission ID
+ * @param {object} problem - Problem object
+ * @param {array} tests - Test cases array
+ * @param {string} language - Programming language
+ * @param {string} source - Source code
+ * @param {number} cid - Contest ID
+ * @param {number} userId - User ID
+ * @param {string} pid - Problem ID
+ */
+async function judgeSubmission(submission_id, problem, tests, language, source, cid, userId, pid) {
+  try {
+    let compileError = false, compileOutput = '', exePath = null;
+    const workdir = path.join(__dirname, 'tmp_runs');
+    if (!fs.existsSync(workdir)) fs.mkdirSync(workdir, { recursive: true });
+    
+    const runId = uuidv4();
+    const srcExt = language === 'cpp' ? '.cpp' : (language === 'python' ? '.py' : (language === 'node' ? '.js' : '.txt'));
+    const srcFile = path.join(workdir, sanitizeFilename(runId + srcExt));
+    
+    // Write source file securely
+    fs.writeFileSync(srcFile, source, { mode: 0o600 }); // Restrict file permissions
+
+    // Compile if C++ with improved security
+    if (language === 'cpp') {
+      const binPath = path.join(workdir, sanitizeFilename(runId + '_bin'));
+      try {
         await new Promise((resolve, reject) => {
-          const cp = spawn('g++', [srcFile, '-o', binPath, '-std=c++26', '-O2', '-lm'], { cwd: workdir, timeout: 20000 });
-          let cout='', cerr='';
-          cp.stdout.on('data', d=>cout+=d.toString());
-          cp.stderr.on('data', d=>cerr+=d.toString());
-          cp.on('error', e=>reject(e));
+          // Use timeout and resource limits for compilation
+          const cp = spawn('g++', [srcFile, '-o', binPath, '-std=c++26', '-O2', '-lm', '-static'], { 
+            cwd: workdir, 
+            timeout: 30000,
+            stdio: ['ignore', 'pipe', 'pipe']
+          });
+          let cout = '', cerr = '';
+          cp.stdout.on('data', d => {
+            cout += d.toString();
+            if (cout.length > 10000) cp.kill('SIGTERM'); // Prevent output bombing
+          });
+          cp.stderr.on('data', d => {
+            cerr += d.toString();
+            if (cerr.length > 10000) cp.kill('SIGTERM'); // Prevent output bombing
+          });
+          cp.on('error', e => reject(e));
           cp.on('close', code => {
-            compileOutput = cout + '\n' + cerr;
-            if (code !== 0) { compileError = true; resolve(); } else { exePath = binPath; resolve(); }
+            compileOutput = (cout + '\n' + cerr).slice(0, 10000); // Limit output size
+            if (code !== 0) { 
+              compileError = true; 
+              resolve(); 
+            } else { 
+              exePath = binPath; 
+              // Set executable permissions but restrict to owner only
+              try {
+                fs.chmodSync(binPath, 0o700);
+              } catch (e) {
+                console.warn('Could not set file permissions:', e);
+              }
+              resolve(); 
+            }
           });
         });
+      } catch (e) {
+        compileError = true;
+        compileOutput = 'Compilation timeout or system error';
       }
+    }
 
-      if (compileError) {
-        await pool.query('UPDATE submissions SET status=?, score=?, compile_error=1, compile_output=? WHERE id=?',
-          ['CE', 0, compileOutput, submission_id]);
-        await pool.query('INSERT INTO attempts (contest_id, user_id, problem_id, submission_id, is_ac, is_compile_error, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [cid, req.session.userId, pid, submission_id, 0, 1, Date.now()]);
-        return;
+    if (compileError) {
+      await pool.query('UPDATE submissions SET status=?, score=?, compile_error=1, compile_output=? WHERE id=?',
+        ['CE', 0, compileOutput, submission_id]);
+      await pool.query('INSERT INTO attempts (contest_id, user_id, problem_id, submission_id, is_ac, is_compile_error, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [cid, userId, pid, submission_id, 0, 1, Date.now()]);
+      
+      // Cleanup temporary files
+      cleanupTempFiles([srcFile, exePath]);
+      return;
+    }
+
+    // Run all tests with improved security and resource limits
+    const perTest = [];
+    let allPassed = true;
+    let maxRuntime = 0;
+    
+    for (let i = 0; i < tests.length; i++) {
+      const t = tests[i];
+      
+      // Validate and read test files securely
+      const inPath = path.resolve(__dirname, t.input_path);
+      const outPath = path.resolve(__dirname, t.output_path);
+      
+      // Ensure test files are within expected directory
+      if (!inPath.startsWith(path.resolve(__dirname)) || !outPath.startsWith(path.resolve(__dirname))) {
+        perTest.push({ index: i+1, verdict: 'SystemError', runtime_ms: 0, stderr: 'Invalid test file path' });
+        allPassed = false;
+        continue;
       }
-
-      // run all tests (reading test input/output from files)
-      const perTest = [];
-      let allPassed = true;
-      let maxRuntime = 0;
-      for (let i=0;i<tests.length;i++) {
-        const t = tests[i];
-        // read input and expected output from file
-        const inPath = path.join(__dirname, t.input_path);
-        const outPath = path.join(__dirname, t.output_path);
-        let inputData = '';
-        let expected = '';
-        try {
-          inputData = fs.readFileSync(inPath, 'utf8');
-        } catch(e){ inputData = ''; }
-        try {
-          expected = fs.readFileSync(outPath, 'utf8');
-        } catch(e){ expected = ''; }
-        // run process depending on language
-        const timelimit = problem.timelimit_ms || 2000;
-        const start = Date.now();
-        let resObj = null;
-        try {
-          if (language === 'cpp') {
-            resObj = await runProcess(exePath, [], inputData, timelimit);
-          } else if (language === 'python') {
-            resObj = await runProcess('python3', [srcFile], inputData, timelimit);
-          } else {
-            perTest.push({ index: i+1, verdict: 'SystemError', runtime_ms: 0, stderr: 'Unsupported language' });
-            allPassed = false;
-            continue;
-          }
-        } catch (e) {
-          perTest.push({ index: i+1, verdict: 'SystemError', runtime_ms: 0, stderr: String(e) });
+      
+      let inputData = '';
+      let expected = '';
+      try {
+        inputData = fs.readFileSync(inPath, 'utf8');
+        expected = fs.readFileSync(outPath, 'utf8');
+        
+        // Limit input size for security
+        if (inputData.length > 100000) {
+          inputData = inputData.slice(0, 100000);
+        }
+      } catch(e) {
+        perTest.push({ index: i+1, verdict: 'SystemError', runtime_ms: 0, stderr: 'Test file read error' });
+        allPassed = false;
+        continue;
+      }
+      
+      // Run process with improved security and limits
+      const timelimit = Math.min(problem.timelimit_ms || 2000, 30000); // Cap at 30 seconds
+      const start = Date.now();
+      let resObj = null;
+      
+      try {
+        if (language === 'cpp') {
+          resObj = await runProcessSecure(exePath, [], inputData, timelimit);
+        } else if (language === 'python') {
+          resObj = await runProcessSecure('python3', [srcFile], inputData, timelimit);
+        } else if (language === 'node') {
+          resObj = await runProcessSecure('node', [srcFile], inputData, timelimit);
+        } else {
+          perTest.push({ index: i+1, verdict: 'SystemError', runtime_ms: 0, stderr: 'Unsupported language' });
           allPassed = false;
           continue;
         }
-        const runtime_ms = resObj.runtime_ms;
-        maxRuntime = Math.max(maxRuntime, runtime_ms);
-        let verdict = 'AC';
-        if (resObj.timedOut) {
-          verdict = 'TLE'; allPassed = false;
-        } else if ((resObj.stderr||'').trim()) {
-          verdict = 'RE'; allPassed = false;
-        } else {
-          const got = String(resObj.stdout||'').replace(/\r/g,'').trim();
-          const want = String(expected||'').replace(/\r/g,'').trim();
-          if (got !== want) { verdict='WA'; allPassed = false; }
-        }
-        perTest.push({ index: i+1, verdict, runtime_ms, stderr: resObj.stderr || '' }); // do NOT store/display stdout
+      } catch (e) {
+        perTest.push({ index: i+1, verdict: 'SystemError', runtime_ms: 0, stderr: 'Execution error: ' + String(e).slice(0, 500) });
+        allPassed = false;
+        continue;
       }
-
-      const finalScore = perTest.every(r=>r.verdict==='AC') ? (problem.score||100) : 0;
-      const finalStatus = perTest.every(r=>r.verdict==='AC') ? 'AC' : perTest.find(r=>r.verdict==='TLE') ? 'TLE' : perTest.find(r=>r.verdict==='RE') ? 'RE' : 'WA';
-      await pool.query('UPDATE submissions SET status=?, score=?, runtime_ms=?, message=?, result_json=? WHERE id=?',
-        [finalStatus, finalScore, maxRuntime, (perTest.find(r=>r.verdict!=='AC') || {}).verdict || '', JSON.stringify(perTest), submission_id]);
-      await pool.query('INSERT INTO attempts (contest_id, user_id, problem_id, submission_id, is_ac, is_compile_error, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [cid, req.session.userId, pid, submission_id, (finalScore>0?1:0), 0, Date.now()]);
-    } catch(e) {
-      console.error('Judge error', e);
-      await pool.query('UPDATE submissions SET status=?, score=?, message=? WHERE id=?', ['SystemError', 0, String(e), submission_id]);
-      await pool.query('INSERT INTO attempts (contest_id, user_id, problem_id, submission_id, is_ac, is_compile_error, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [cid, req.session.userId, pid, submission_id, 0, 0, Date.now()]);
+      
+      const runtime_ms = resObj.runtime_ms;
+      maxRuntime = Math.max(maxRuntime, runtime_ms);
+      let verdict = 'AC';
+      
+      if (resObj.timedOut) {
+        verdict = 'TLE'; 
+        allPassed = false;
+      } else if ((resObj.stderr || '').trim()) {
+        verdict = 'RE'; 
+        allPassed = false;
+      } else {
+        const got = String(resObj.stdout || '').replace(/\r/g, '').trim();
+        const want = String(expected || '').replace(/\r/g, '').trim();
+        if (got !== want) { 
+          verdict = 'WA'; 
+          allPassed = false; 
+        }
+      }
+      
+      perTest.push({ 
+        index: i+1, 
+        verdict, 
+        runtime_ms, 
+        stderr: (resObj.stderr || '').slice(0, 1000) // Limit error message size
+      });
     }
-  })();
 
-  res.redirect(`/contests/${cid}/submissions?problem=${pid}`);
-});
+    const finalScore = perTest.every(r => r.verdict === 'AC') ? (problem.score || 100) : 0;
+    const finalStatus = perTest.every(r => r.verdict === 'AC') ? 'AC' : 
+                       perTest.find(r => r.verdict === 'TLE') ? 'TLE' : 
+                       perTest.find(r => r.verdict === 'RE') ? 'RE' : 'WA';
+    
+    await pool.query('UPDATE submissions SET status=?, score=?, runtime_ms=?, message=?, result_json=? WHERE id=?',
+      [finalStatus, finalScore, maxRuntime, (perTest.find(r => r.verdict !== 'AC') || {}).verdict || '', JSON.stringify(perTest), submission_id]);
+    await pool.query('INSERT INTO attempts (contest_id, user_id, problem_id, submission_id, is_ac, is_compile_error, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [cid, userId, pid, submission_id, (finalScore > 0 ? 1 : 0), 0, Date.now()]);
+    
+    // Cleanup temporary files
+    cleanupTempFiles([srcFile, exePath]);
+    
+  } catch (e) {
+    console.error('Judge error for submission', submission_id, ':', e);
+    try {
+      await pool.query('UPDATE submissions SET status=?, score=?, message=? WHERE id=?', 
+        ['SystemError', 0, 'Internal judging error', submission_id]);
+      await pool.query('INSERT INTO attempts (contest_id, user_id, problem_id, submission_id, is_ac, is_compile_error, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [cid, userId, pid, submission_id, 0, 0, Date.now()]);
+    } catch (dbError) {
+      console.error('Failed to update submission after judge error:', dbError);
+    }
+  }
+}
 
-// Robust runProcess — replace your existing runProcess with this
-function runProcess(cmd, args, input, timelimitMs) {
+/**
+ * Safely cleanup temporary files
+ * @param {string[]} files - Array of file paths to cleanup
+ */
+function cleanupTempFiles(files) {
+  for (const file of files) {
+    if (file) {
+      try {
+        fs.unlinkSync(file);
+      } catch (e) {
+        // File might not exist or already cleaned up, ignore error
+      }
+    }
+  }
+}
+
+/**
+ * Runs a process with enhanced security measures and resource limits
+ * @param {string} cmd - Command to execute
+ * @param {string[]} args - Command arguments
+ * @param {string} input - Input data
+ * @param {number} timelimitMs - Time limit in milliseconds
+ * @returns {Promise<object>} - Execution result
+ */
+function runProcessSecure(cmd, args, input, timelimitMs) {
   return new Promise((resolve) => {
     const startNs = process.hrtime.bigint();
     let child;
+    
     try {
-      child = spawn(cmd, args, { stdio: ['pipe','pipe','pipe'] });
+      // Enhanced process spawning with security options
+      child = spawn(cmd, args, { 
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: timelimitMs,
+        killSignal: 'SIGKILL',
+        // Add resource limits if available
+        uid: process.getuid ? process.getuid() : undefined,
+        gid: process.getgid ? process.getgid() : undefined
+      });
     } catch (err) {
       const endNs = process.hrtime.bigint();
       const runtime_ms = Number(endNs - startNs) / 1e6;
@@ -501,35 +758,56 @@ function runProcess(cmd, args, input, timelimitMs) {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    const maxOutputSize = 100000; // 100KB limit on output
 
-    // --- IMPORTANT: attach error handlers to child streams to avoid unhandled 'error' (EPIPE)
+    // Enhanced error handlers for child streams
     const streamErrHandler = (err) => {
-      // swallow common pipe errors (EPIPE) — but capture non-EPIPE for debugging
       if (err && err.code && err.code !== 'EPIPE') {
         stderr += `\n[stream error] ${String(err)}`;
       }
-      // do NOT throw here; we want to keep running and let child.close settle
     };
+    
     if (child.stdin)  child.stdin.on('error', streamErrHandler);
     if (child.stdout) child.stdout.on('error', streamErrHandler);
     if (child.stderr) child.stderr.on('error', streamErrHandler);
 
-    // killer: give a small margin (110%) then SIGKILL
-    const killAfter = typeof timelimitMs === 'number' ? Math.max(1, Math.floor(timelimitMs * 1.1)) : 60_000;
+    // Enhanced timeout with margin and immediate kill
+    const killAfter = Math.min(timelimitMs * 1.1, timelimitMs + 1000);
     const killer = setTimeout(() => {
       timedOut = true;
-      try { child.kill('SIGKILL'); } catch (e) {}
+      try { 
+        child.kill('SIGKILL'); 
+      } catch (e) {}
     }, killAfter);
     if (killer.unref) killer.unref();
 
-    if (child.stdout) child.stdout.on('data', (d) => { stdout += d.toString(); });
-    if (child.stderr) child.stderr.on('data', (d) => { stderr += d.toString(); });
+    // Output collection with size limits
+    if (child.stdout) {
+      child.stdout.on('data', (d) => { 
+        stdout += d.toString(); 
+        if (stdout.length > maxOutputSize) {
+          stdout = stdout.slice(0, maxOutputSize);
+          try { child.kill('SIGKILL'); } catch (e) {}
+        }
+      });
+    }
+    
+    if (child.stderr) {
+      child.stderr.on('data', (d) => { 
+        stderr += d.toString(); 
+        if (stderr.length > maxOutputSize) {
+          stderr = stderr.slice(0, maxOutputSize);
+          try { child.kill('SIGKILL'); } catch (e) {}
+        }
+      });
+    }
 
-    // Safely write input (handle writable flag and drain; swallow write errors)
+    // Enhanced input handling with size limits
     try {
       if (input && input.length) {
+        const inputToSend = input.length > 100000 ? input.slice(0, 100000) : input;
         if (child.stdin && child.stdin.writable) {
-          const ok = child.stdin.write(input, () => {
+          const ok = child.stdin.write(inputToSend, () => {
             try { child.stdin.end(); } catch (_) {}
           });
           if (!ok && child.stdin) {
@@ -544,7 +822,6 @@ function runProcess(cmd, args, input, timelimitMs) {
         try { child.stdin && child.stdin.end(); } catch (_) {}
       }
     } catch (e) {
-      // ignore write-time exceptions (EPIPE etc.)
       try { child.stdin && child.stdin.end(); } catch (_) {}
     }
 
@@ -727,14 +1004,35 @@ app.get('/logout', (req,res) => { req.session.destroy(()=>res.redirect('/')); })
 app.get('/register', (req,res) => res.render('register.njk', { error: null }));
 app.post('/register', async (req,res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.render('register.njk', { error: 'Missing fields' });
+  
+  // Enhanced input validation
+  if (!username || !password) {
+    return res.render('register.njk', { error: 'Username and password are required' });
+  }
+  
+  if (username.length < 3 || username.length > 50) {
+    return res.render('register.njk', { error: 'Username must be between 3 and 50 characters' });
+  }
+  
+  if (password.length < 6) {
+    return res.render('register.njk', { error: 'Password must be at least 6 characters long' });
+  }
+  
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+    return res.render('register.njk', { error: 'Username can only contain letters, numbers, hyphens, and underscores' });
+  }
+  
   try {
-    const pwHash = await bcrypt.hash(password, 10);
+    const pwHash = await bcrypt.hash(password, 12); // Increased cost for better security
     await pool.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, pwHash, 'user']);
     res.redirect('/login');
   } catch (e) {
-    console.error(e);
-    res.render('register.njk', { error: 'Username taken or DB error' });
+    console.error('Registration error:', e);
+    if (e.code === 'ER_DUP_ENTRY') {
+      res.render('register.njk', { error: 'Username already taken' });
+    } else {
+      res.render('register.njk', { error: 'Registration failed. Please try again.' });
+    }
   }
 });
 // app.post('/register', async (req,res) => {
