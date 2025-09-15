@@ -1,0 +1,10 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Register</h2>
+  <form class="ui form" method="post">
+    {% if error %}<div class="ui red message">{{ error }}</div>{% endif %}
+    <div class="field"><label>Username</label><input name="username"></div>
+    <div class="field"><label>Password</label><input type="password" name="password"></div>
+    <button class="ui primary button">Register</button>
+  </form>
+{% endblock %}

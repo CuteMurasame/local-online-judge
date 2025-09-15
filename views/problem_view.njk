@@ -1,0 +1,40 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">{{ problem.id }} — {{ problem.title }}</h2>
+  <div class="ui segment">
+    <pre style="white-space:pre-wrap;">{{ problem.statement }}</pre>
+  </div>
+
+  {% if contest %}
+    <h3 class="ui header">Submit</h3>
+    <form class="ui form" method="post" action="/contest/{{ contest.id }}/problem/{{ problem.id }}/submit">
+      <div class="field">
+        <label>Language</label>
+        <select name="language" class="ui dropdown">
+          <!--<option value="node">Node.js</option>-->
+          <option value="cpp">C++</option>
+          <option value="python">Python 3</option>
+        </select>
+      </div>
+      <div class="field"><label>Source</label><textarea name="source" rows="16"></textarea></div>
+      <button class="ui primary button">Submit</button>
+    </form>
+
+    <h4 class="ui header">Your recent submissions for this problem</h4>
+    <table class="ui celled table">
+      <thead><tr><th>ID</th><th>Status</th><th>Score</th><th>Time</th></tr></thead>
+      <tbody>
+        {% for s in submissions %}
+          <tr>
+            <td><a href="/submission/{{ s.id }}">{{ s.id }}</a></td>
+            <td>{{ s.status }} {% if s.compile_error %}(CE){% endif %}</td>
+            <td>{{ s.score }}</td>
+            <td>{{ s.created_ts | fmtDate }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4">No submissions</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}

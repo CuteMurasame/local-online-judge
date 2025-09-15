@@ -1,0 +1,19 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Create Problem</h2>
+  {% if error %}<div class="ui red message">{{ error }}</div>{% endif %}
+  <form class="ui form" method="post">
+    <div class="field">
+      <label>ID (letters, numbers, underscore)</label>
+      <input name="id" required>
+    </div>
+    <div class="field"><label>Title</label><input name="title"></div>
+    <div class="field"><label>Statement</label><textarea name="statement"></textarea></div>
+    <div class="two fields">
+      <div class="field"><label>Time limit (ms)</label><input name="timelimit_ms" value="2000"></div>
+      <div class="field"><label>Memory (KB)</label><input name="memlimit_kb" value="65536"></div>
+    </div>
+    <div class="field"><label>Score</label><input name="score" value="100"></div>
+    <button class="ui primary button">Create</button>
+  </form>
+{% endblock %}

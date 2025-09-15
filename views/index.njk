@@ -1,0 +1,36 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Contests</h2>
+  <div class="ui relaxed divided list">
+    {% if contests and contests.length %}
+      {% for c in contests %}
+        <div class="item">
+          <i class="large calendar outline middle aligned icon"></i>
+          <div class="content">
+            <a class="header" href="/contests/{{ c.id }}">{{ c.title }}</a>
+            <div class="description">
+              {{ c.start_ts | fmtDate }} → {{ c.end_ts | fmtDate }}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div>No contests yet</div>
+    {% endif %}
+  </div>
+
+  <h2 class="ui header">Global problemset</h2>
+  <div class="ui cards">
+    {% if problems and problems.length %}
+      {% for p in problems %}
+        <div class="card">
+          <div class="content">
+            <div class="header"><a href="/problem/{{ p.id }}">{{ p.id }} - {{ p.title }}</a></div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div>No problems</div>
+    {% endif %}
+  </div>
+{% endblock %}

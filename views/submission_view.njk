@@ -1,0 +1,34 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Submission #{{ sub.id }} — Problem {{ sub.problem_id }}</h2>
+  <div class="ui segment">
+    <p><strong>User:</strong> {{ sub.username }}</p>
+    <p><strong>Language:</strong> {{ sub.language }} <strong>Status:</strong> {{ sub.status }} {% if sub.compile_error %}<span style="color:red">(CE)</span>{% endif %}</p>
+    <p><strong>Score:</strong> {{ sub.score }}</p>
+    <p><strong>Submitted:</strong> {{ sub.created_ts | fmtDate }}</p>
+  </div>
+
+  {% if sub.compile_error %}
+    <h3 class="ui header">Compile output</h3>
+    <pre>{{ sub.compile_output }}</pre>
+  {% endif %}
+
+  {% if results %}
+    <h3 class="ui header">Per-test results</h3>
+    <table class="ui celled table">
+      <thead><tr><th>#</th><th>Verdict</th><th>Time (ms)</th><th>Stderr (trim)</th></tr></thead>
+      <tbody>
+        {% for r in results %}
+          <tr>
+            <td>{{ r.index }}</td>
+            <td>{{ r.verdict }}</td>
+            <td>{{ r.runtime_ms }}</td>
+            <td><pre>{{ r.stderr | truncate(300, true) }}</pre></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="ui message">No per-test results available.</div>
+  {% endif %}
+{% endblock %}

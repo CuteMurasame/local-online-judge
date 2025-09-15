@@ -1,0 +1,7 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">{{ problem.id }} — {{ problem.title }} (Submit in contests!)</h2>
+  <div class="ui segment">
+    <pre style="white-space:pre-wrap;">{{ problem.statement }}</pre>
+  </div>
+{% endblock %}

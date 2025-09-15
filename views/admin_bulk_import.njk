@@ -1,0 +1,56 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Bulk Import Testcases</h2>
+
+  {% if error %}
+    <div class="ui red message">{{ error }}</div>
+  {% endif %}
+
+  <form class="ui form" method="post" action="/admin/bulk_import/scan">
+    <div class="field">
+      <label>Problem</label>
+      <select name="problem_id" class="ui dropdown" required>
+        <option value="">Select problem</option>
+        {% for p in problems %}
+          <option value="{{ p.id }}">{{ p.id }} — {{ p.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Server directory to scan (must be inside allowed root)</label>
+      <input name="dir_path" placeholder="/absolute/or/relative/path/to/folder" required>
+      <div class="ui small message">Files under this directory will be scanned for pairs like <code>name.in</code> + <code>name.ans</code> or <code>name.out</code></div>
+    </div>
+
+    <button class="ui primary button">Scan directory</button>
+  </form>
+
+  {% if preview %}
+    <h3 class="ui header">Preview (found {{ preview.items.length }} pairs)</h3>
+    <div class="ui small info message">
+      Source directory: <strong>{{ preview.dir_path }}</strong>
+    </div>
+
+    <table class="ui celled table">
+      <thead><tr><th>#</th><th>Input filename</th><th>Input size</th><th>Output filename</th><th>Output size</th></tr></thead>
+      <tbody>
+        {% for it in preview.items %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ it.input_name }}</td>
+            <td>{{ it.input_size }} bytes</td>
+            <td>{{ it.output_name }}</td>
+            <td>{{ it.output_size }} bytes</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <form method="post" action="/admin/bulk_import/commit">
+      <input type="hidden" name="preview_id" value="{{ preview.id }}">
+      <button class="ui green button">Import {{ preview.items.length }} testcases into {{ preview.problem_id }}</button>
+      <a class="ui button" href="/admin/bulk_import">Cancel</a>
+    </form>
+  {% endif %}
+{% endblock %}

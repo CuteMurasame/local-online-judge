@@ -1,0 +1,28 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Contest — {{ contest.title }}</h2>
+  <p><strong>Start:</strong> {{ contest.start_ts | fmtDate }} · <strong>End:</strong> {{ contest.end_ts | fmtDate }}</p>
+
+  {% if registered %}
+    <div class="ui green message">Registered (unrated)</div>
+  {% else %}
+    <form method="post" action="/contests/{{ contest.id }}/register"><button class="ui button">Register (unrated)</button></form>
+  {% endif %}
+
+  <h3 class="ui header">Problems</h3>
+  <div class="ui relaxed divided list">
+    {% for p in problems %}
+      <div class="item">
+        <i class="large file alternate outline middle aligned icon"></i>
+        <div class="content">
+          <a class="header" href="/contest/{{ contest.id }}/problem/{{ p.id }}">{{ p.id }} - {{ p.title }}</a>
+          <div class="description">Time limit: {{ p.timelimit_ms }} ms · Score: {{ p.score }}</div>
+        </div>
+      </div>
+    {% else %}
+      <div>No problems</div>
+    {% endfor %}
+  </div>
+
+  <a class="ui button" href="/contests/{{ contest.id }}/scoreboard">Scoreboard</a>
+{% endblock %}

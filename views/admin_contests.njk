@@ -1,0 +1,21 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Admin — Contests</h2>
+  <a class="ui primary button" href="/admin/contests/create">Create contest</a>
+
+  <table class="ui celled table" style="margin-top:12px;">
+    <thead><tr><th>Title</th><th>Start</th><th>End</th><th>Action</th></tr></thead>
+    <tbody>
+      {% for c in contests %}
+        <tr>
+          <td>{{ c.title }}</td>
+          <td>{{ c.start_ts | fmtDate }}</td>
+          <td>{{ c.end_ts | fmtDate }}</td>
+          <td><a class="ui button" href="/admin/contests/{{ c.id }}/edit">Edit</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4">No contests</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

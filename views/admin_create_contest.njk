@@ -1,0 +1,19 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Create Contest</h2>
+  {% if error %}<div class="ui red message">{{ error }}</div>{% endif %}
+  <form class="ui form" method="post">
+    <div class="field"><label>Title</label><input name="title"></div>
+    <div class="field"><label>Start (ISO datetime, e.g. 2025-01-02T03:04:05Z)</label><input name="start_iso"></div>
+    <div class="field"><label>End (ISO datetime)</label><input name="end_iso"></div>
+    <div class="field">
+      <label>Problems (Ctrl/Cmd+click to choose multiple)</label>
+      <select name="problem_ids" multiple size="8" class="ui dropdown">
+        {% for p in problems %}
+          <option value="{{ p.id }}">{{ p.id }} - {{ p.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="ui primary button">Create contest</button>
+  </form>
+{% endblock %}

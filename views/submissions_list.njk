@@ -1,0 +1,22 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Submissions — Contest {{ contest_id }}</h2>
+  <table class="ui celled table">
+    <thead><tr><th>ID</th><th>User</th><th>Problem</th><th>Lang</th><th>Status</th><th>Score</th><th>When</th></tr></thead>
+    <tbody>
+      {% for s in submissions %}
+        <tr>
+          <td><a href="/submission/{{ s.id }}">{{ s.id }}</a></td>
+          <td>{{ s.username or '—' }}</td>
+          <td>{{ s.problem_id }}</td>
+          <td>{{ s.language }}</td>
+          <td>{{ s.status }} {% if s.compile_error %}(CE){% endif %}</td>
+          <td>{{ s.score }}</td>
+          <td>{{ s.created_ts | fmtDate }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7">No submissions</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

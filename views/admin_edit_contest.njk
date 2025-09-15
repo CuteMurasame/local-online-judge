@@ -1,0 +1,19 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Edit Contest — {{ contest.title }}</h2>
+  {% if error %}<div class="ui red message">{{ error }}</div>{% endif %}
+  <form class="ui form" method="post" action="/admin/contests/{{ contest.id }}/edit">
+    <div class="field"><label>Title</label><input name="title" value="{{ contest.title }}"></div>
+    <div class="field"><label>Start (ISO datetime)</label><input name="start_iso" value="{{ contest.start_ts | fmtDate }}"></div>
+    <div class="field"><label>End (ISO datetime)</label><input name="end_iso" value="{{ contest.end_ts | fmtDate }}"></div>
+    <div class="field">
+      <label>Problems (Ctrl/Cmd+click to choose multiple)</label>
+      <select name="problem_ids" multiple size="8" class="ui dropdown">
+        {% for p in problems %}
+          <option value="{{ p.id }}" {% if p.id in selectedIds %}selected{% endif %}>{{ p.id }} - {{ p.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="ui primary button">Save</button>
+  </form>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Edit Problem — {{ problem.id }}</h2>
+
+  <form class="ui form" method="post" action="/admin/problems/{{ problem.id }}/edit">
+    <div class="field"><label>Title</label><input name="title" value="{{ problem.title }}"></div>
+    <div class="field"><label>Statement</label><textarea name="statement">{{ problem.statement }}</textarea></div>
+    <div class="two fields">
+      <div class="field"><label>Time limit (ms)</label><input name="timelimit_ms" value="{{ problem.timelimit_ms }}"></div>
+      <div class="field"><label>Memory (KB)</label><input name="memlimit_kb" value="{{ problem.memlimit_kb }}"></div>
+    </div>
+    <div class="field"><label>Score</label><input name="score" value="{{ problem.score }}"></div>
+    <div class="field">
+      <label>Visibility</label>
+      <select name="visibility" class="ui dropdown">
+        <option value="public" {% if problem.visibility=='public' %}selected{% endif %}>Public</option>
+        <option value="contest" {% if problem.visibility=='contest' %}selected{% endif %}>Contest Only</option>
+      </select>
+    </div>
+    <button class="ui primary button">Save</button>
+  </form>
+
+  <h3 class="ui header">Testcases (files only)</h3>
+  <table class="ui celled table">
+    <thead><tr><th>#</th><th>Input file</th><th>Output file</th></tr></thead>
+    <tbody>
+      {% for t in tests %}
+        <tr>
+          <td>{{ t.id }}</td>
+          <td>
+            {% if t.input_name %}
+              <strong>{{ t.input_name }}</strong> ({{ t.input_size }} bytes)
+            {% else %}
+              <em>unknown</em>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.output_name %}
+              <strong>{{ t.output_name }}</strong> ({{ t.output_size }} bytes)
+            {% else %}
+              <em>unknown</em>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3">No testcases</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h4 class="ui header">Add testcase (upload files or paste small text)</h4>
+  <form class="ui form" method="post" action="/admin/problems/{{ problem.id }}/add_test" enctype="multipart/form-data">
+    <div class="fields">
+      <div class="eight wide field">
+        <label>Input file</label>
+        <input type="file" name="input_file">
+      </div>
+      <div class="eight wide field">
+        <label>Output file</label>
+        <input type="file" name="output_file">
+      </div>
+    </div>
+
+    <div class="two fields">
+      <div class="field">
+        <label>Or paste input (small)</label>
+        <textarea name="input_text"></textarea>
+      </div>
+      <div class="field">
+        <label>Or paste output (small)</label>
+        <textarea name="output_text"></textarea>
+      </div>
+    </div>
+    <button class="ui button">Add testcase</button>
+  </form>
+
+  <h4 class="ui header">Import testcases from text file</h4>
+  <div class="ui message">
+    Upload a plain text file with testcases separated by a line <code>---TESTCASE---</code> and input/output split by <code>---OUTPUT---</code>.
+  </div>
+  <form class="ui form" method="post" action="/admin/problems/{{ problem.id }}/import_tests" enctype="multipart/form-data">
+    <div class="field"><input type="file" name="file" required></div>
+    <button class="ui button">Import</button>
+  </form>
+{% endblock %}

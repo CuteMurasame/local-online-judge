@@ -1,0 +1,28 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Admin — Problems</h2>
+  <a class="ui button primary" href="/admin/problems/create">Create problem</a>
+  <div style="margin-top: 12px;">
+    <table class="ui celled table">
+      <thead><tr><th>ID</th><th>Title</th><th>Time(ms)</th><th>Score</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for p in problems %}
+          <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ p.title }}</td>
+            <td>{{ p.timelimit_ms }}</td>
+            <td>{{ p.score }}</td>
+            <td><a href="/admin/problems/{{ p.id }}">Edit</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5">No problems</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:12px;">
+    <a class="ui button" href="/admin/bulk_import">Bulk import from server directory</a>
+  </div>
+  <h3 class="ui header">Contests</h3>
+  <a class="ui button" href="/admin/contests">Manage contests</a>
+{% endblock %}

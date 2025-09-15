@@ -1,0 +1,41 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h2 class="ui header">Scoreboard — {{ contest.title }}</h2>
+  <table class="ui celled table">
+    <thead>
+      <tr>
+        <th>Rank</th><th>User</th>
+        {% for p in problems %}
+          <th>{{ p.id }}</th>
+        {% endfor %}
+        <th>Total Score</th><th>Penalty</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in scoreboard %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ row.user.username }}</td>
+          {% for cell in row.perProblemCells %}
+            <td>
+              {% if cell.status == 'no_submit' %}
+                -
+              {% elif cell.status == 'tried_no_ac' %}
+                <span style="color:grey">(0)</span>
+              {% elif cell.status == 'ac' %}
+                <span style="color:green">{{ cell.score }}</span>
+                {% if cell.tries > 0 %} <span style="color:red">({{ cell.tries }})</span> {% endif %}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          {% endfor %}
+          <td>{{ row.totalScore }}</td>
+          <td>{{ row.totalPenaltyDisplay }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="{{ 4 + problems.length }}">No participants</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
