@@ -87,7 +87,7 @@ A comprehensive web-based competitive programming platform for hosting local con
 
 5. **Start the server:**
    ```bash
-   npm start
+   ulimit -s unlimited && node server.js
    ```
 
 6. **Access the application:**
